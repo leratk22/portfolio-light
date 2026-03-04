@@ -1,6 +1,7 @@
 (function () {
   var FORM_SELECTOR = "form.framer-iiob8";
   var AJAX_ENDPOINT = "https://formsubmit.co/ajax/leratk22@gmail.com";
+  var FALLBACK_ENDPOINT = "https://formsubmit.co/leratk22@gmail.com";
   var HONEYPOT_NAMES = [
     "website",
     "company",
@@ -70,6 +71,21 @@
     return !!button && form.contains(button);
   }
 
+  function buildPayload(nameValue, emailValue, messageValue) {
+    var payload = new FormData();
+    payload.append("name", nameValue);
+    payload.append("email", emailValue);
+    payload.append("message", messageValue);
+    payload.append("_subject", "New message from portfolio contact form");
+    payload.append("_captcha", "false");
+    payload.append("_template", "table");
+    return payload;
+  }
+
+  function isActivationMessage(message) {
+    return String(message || "").toLowerCase().indexOf("activation") !== -1;
+  }
+
   function patchForm() {
     var originalForm = document.querySelector(FORM_SELECTOR);
     if (!originalForm || originalForm.dataset.formOverrideApplied === "1") {
@@ -124,37 +140,47 @@
 
       setStatus(statusEl, "Отправляю сообщение...", "info");
 
-      var payload = new FormData();
-      payload.append("name", nameValue);
-      payload.append("email", emailValue);
-      payload.append("message", messageValue);
-      payload.append("_subject", "New message from portfolio contact form");
-      payload.append("_captcha", "false");
-      payload.append("_template", "table");
-
       fetch(AJAX_ENDPOINT, {
         method: "POST",
-        body: payload,
+        body: buildPayload(nameValue, emailValue, messageValue),
         headers: {
           Accept: "application/json"
         }
       })
         .then(function (response) {
-          return response.json().catch(function () {
-            return {};
-          });
+          return response
+            .json()
+            .catch(function () {
+              return {};
+            })
+            .then(function (data) {
+              return {
+                response: response,
+                data: data
+              };
+            });
         })
-        .then(function (data) {
-          var ok = String(data.success).toLowerCase() === "true";
+        .then(function (result) {
+          var data = result.data || {};
+          var success = String(data.success || "").toLowerCase();
           var message = String(data.message || "");
 
-          if (ok) {
+          if (isActivationMessage(message)) {
+            var activationError = new Error("activation_required");
+            activationError.isActivation = true;
+            throw activationError;
+          }
+
+          if (success === "true" || (result.response.ok && success !== "false")) {
             form.reset();
             setStatus(statusEl, "Сообщение отправлено. Спасибо!", "success");
             return;
           }
 
-          if (message.toLowerCase().indexOf("activation") !== -1) {
+          throw new Error("ajax_not_confirmed");
+        })
+        .catch(function (error) {
+          if (error && error.isActivation) {
             setStatus(
               statusEl,
               "Форма не активирована. Проверь email leratk22@gmail.com (включая Спам) и нажми ссылку Activate Form от FormSubmit.",
@@ -163,10 +189,18 @@
             return;
           }
 
-          setStatus(statusEl, "Не удалось отправить сообщение. Попробуй еще раз чуть позже.", "error");
-        })
-        .catch(function () {
-          setStatus(statusEl, "Ошибка отправки. Проверь интернет и попробуй снова.", "error");
+          return fetch(FALLBACK_ENDPOINT, {
+            method: "POST",
+            mode: "no-cors",
+            body: buildPayload(nameValue, emailValue, messageValue)
+          })
+            .then(function () {
+              form.reset();
+              setStatus(statusEl, "Сообщение отправлено. Спасибо!", "success");
+            })
+            .catch(function () {
+              setStatus(statusEl, "Ошибка отправки. Проверь интернет и попробуй снова.", "error");
+            });
         })
         .finally(function () {
           isSubmitting = false;
