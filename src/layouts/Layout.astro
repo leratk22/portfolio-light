@@ -1,23 +1,65 @@
+---
+import "../styles/site.css";
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = "Valeria Tkacheva - Senior Product Designer",
+  description = "Creating clear, high-quality digital experiences for mobile and web.",
+} = Astro.props as Props;
+
+const currentPath = Astro.url.pathname;
+---
+
 <!doctype html>
 <html lang="en">
-	<head>
-		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro Basics</title>
-	</head>
-	<body>
-		<slot />
-	</body>
-</html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container site-header-inner">
+        <a class="brand" href="/">LeraTk</a>
+        <nav class="main-nav">
+          <a href="/work/" aria-current={currentPath.startsWith("/work") ? "page" : undefined}>
+            Work
+          </a>
+          <a href="/contact/" aria-current={currentPath === "/contact/" ? "page" : undefined}>
+            Contact
+          </a>
+          <a class="btn-primary" href="mailto:leratk22@gmail.com">Let's Connect</a>
+        </nav>
+      </div>
+    </header>
 
-<style>
-	html,
-	body {
-		margin: 0;
-		width: 100%;
-		height: 100%;
-	}
-</style>
+    <slot />
+
+    <footer class="site-footer">
+      <div class="container footer-card">
+        <div class="footer-top">
+          <h2>Ready to build something great?</h2>
+          <a class="btn-primary" href="/contact/">Let's Talk</a>
+        </div>
+        <div class="footer-links">
+          <a href="/work/">Work</a>
+          <a href="/contact/">Contact</a>
+          <a href="https://dribbble.com/leratk22" target="_blank" rel="noopener">Dribbble</a>
+          <a href="https://www.linkedin.com/in/valeriya-tkacheva/" target="_blank" rel="noopener">
+            LinkedIn
+          </a>
+          <a href="mailto:leratk22@gmail.com">leratk22@gmail.com</a>
+        </div>
+        <p class="copyright">© 2026 All rights reserved</p>
+      </div>
+    </footer>
+  </body>
+</html>

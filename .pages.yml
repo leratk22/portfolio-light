@@ -1,0 +1,28 @@
+media:
+  input: public/images/projects
+  output: /images/projects
+
+content:
+  - name: projects
+    label: Projects
+    type: collection
+    path: src/content/projects
+    filename: "{urlSlug}.md"
+    view:
+      fields: [title, year, role, draft]
+      primary: title
+      sort: [year, title]
+      default:
+        search: ""
+        sort: year
+        order: desc
+    fields:
+      - { name: title, label: Title, type: string, required: true }
+      - { name: urlSlug, label: URL Slug, type: string, required: true }
+      - { name: year, label: Year, type: number, required: true }
+      - { name: role, label: Role, type: string, required: true }
+      - { name: summary, label: Summary, type: text, required: true }
+      - { name: cover, label: Cover Image, type: image, required: false }
+      - { name: tags, label: Tags, type: string, list: true }
+      - { name: draft, label: Draft, type: boolean, default: false }
+      - { name: body, label: Case Study, type: rich-text }
