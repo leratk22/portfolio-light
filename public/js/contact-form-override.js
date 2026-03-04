@@ -52,6 +52,24 @@
     });
   }
 
+  function stopEvent(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === "function") {
+      event.stopImmediatePropagation();
+    }
+  }
+
+  function isSubmitClickForForm(event, form) {
+    var target = event.target;
+    if (!target || typeof target.closest !== "function") {
+      return false;
+    }
+
+    var button = target.closest('button[type="submit"], input[type="submit"]');
+    return !!button && form.contains(button);
+  }
+
   function patchForm() {
     var originalForm = document.querySelector(FORM_SELECTOR);
     if (!originalForm || originalForm.dataset.formOverrideApplied === "1") {
@@ -61,7 +79,11 @@
     // Replace node to remove Framer runtime listeners bound to the original form.
     var form = originalForm.cloneNode(true);
     form.dataset.formOverrideApplied = "1";
+    form.dataset.customSubmit = "1";
     form.setAttribute("novalidate", "novalidate");
+    form.setAttribute("action", "#");
+    form.setAttribute("method", "post");
+    form.setAttribute("data-fs-form", "custom-contact");
 
     clearHoneypots(form);
 
@@ -73,82 +95,116 @@
       form.appendChild(statusEl);
     }
 
+    var isSubmitting = false;
+
+    function submitForm() {
+      if (isSubmitting) {
+        return;
+      }
+
+      var nameInput = form.querySelector('input[name="Name"]');
+      var emailInput = form.querySelector('input[name="Email"]');
+      var messageInput = form.querySelector('textarea[name="Message"]');
+
+      var nameValue = nameInput ? nameInput.value.trim() : "";
+      var emailValue = emailInput ? emailInput.value.trim() : "";
+      var messageValue = messageInput ? messageInput.value.trim() : "";
+
+      if (!nameValue || !emailValue || !messageValue) {
+        setStatus(statusEl, "Заполни, пожалуйста, имя, email и сообщение.", "error");
+        return;
+      }
+
+      isSubmitting = true;
+
+      var buttons = form.querySelectorAll('button[type="submit"], input[type="submit"]');
+      buttons.forEach(function (button) {
+        button.disabled = true;
+      });
+
+      setStatus(statusEl, "Отправляю сообщение...", "info");
+
+      var payload = new FormData();
+      payload.append("name", nameValue);
+      payload.append("email", emailValue);
+      payload.append("message", messageValue);
+      payload.append("_subject", "New message from portfolio contact form");
+      payload.append("_captcha", "false");
+      payload.append("_template", "table");
+
+      fetch(AJAX_ENDPOINT, {
+        method: "POST",
+        body: payload,
+        headers: {
+          Accept: "application/json"
+        }
+      })
+        .then(function (response) {
+          return response.json().catch(function () {
+            return {};
+          });
+        })
+        .then(function (data) {
+          var ok = String(data.success).toLowerCase() === "true";
+          var message = String(data.message || "");
+
+          if (ok) {
+            form.reset();
+            setStatus(statusEl, "Сообщение отправлено. Спасибо!", "success");
+            return;
+          }
+
+          if (message.toLowerCase().indexOf("activation") !== -1) {
+            setStatus(
+              statusEl,
+              "Форма не активирована. Проверь email leratk22@gmail.com (включая Спам) и нажми ссылку Activate Form от FormSubmit.",
+              "error"
+            );
+            return;
+          }
+
+          setStatus(statusEl, "Не удалось отправить сообщение. Попробуй еще раз чуть позже.", "error");
+        })
+        .catch(function () {
+          setStatus(statusEl, "Ошибка отправки. Проверь интернет и попробуй снова.", "error");
+        })
+        .finally(function () {
+          isSubmitting = false;
+          buttons.forEach(function (button) {
+            button.disabled = false;
+          });
+        });
+    }
+
     form.addEventListener(
       "submit",
       function (event) {
-        event.preventDefault();
-
-        var nameInput = form.querySelector('input[name="Name"]');
-        var emailInput = form.querySelector('input[name="Email"]');
-        var messageInput = form.querySelector('textarea[name="Message"]');
-
-        var nameValue = nameInput ? nameInput.value.trim() : "";
-        var emailValue = emailInput ? emailInput.value.trim() : "";
-        var messageValue = messageInput ? messageInput.value.trim() : "";
-
-        if (!nameValue || !emailValue || !messageValue) {
-          setStatus(statusEl, "Заполни, пожалуйста, имя, email и сообщение.", "error");
-          return;
-        }
-
-        var buttons = form.querySelectorAll('button[type="submit"]');
-        buttons.forEach(function (button) {
-          button.disabled = true;
-        });
-
-        setStatus(statusEl, "Отправляю сообщение...", "info");
-
-        var payload = new FormData();
-        payload.append("name", nameValue);
-        payload.append("email", emailValue);
-        payload.append("message", messageValue);
-        payload.append("_subject", "New message from portfolio contact form");
-        payload.append("_captcha", "false");
-        payload.append("_template", "table");
-
-        fetch(AJAX_ENDPOINT, {
-          method: "POST",
-          body: payload,
-          headers: {
-            Accept: "application/json"
-          }
-        })
-          .then(function (response) {
-            return response.json().catch(function () {
-              return {};
-            });
-          })
-          .then(function (data) {
-            var ok = String(data.success).toLowerCase() === "true";
-            var message = String(data.message || "");
-
-            if (ok) {
-              form.reset();
-              setStatus(statusEl, "Сообщение отправлено. Спасибо!", "success");
-              return;
-            }
-
-            if (message.toLowerCase().indexOf("activation") !== -1) {
-              setStatus(
-                statusEl,
-                "Форма не активирована. Проверь email leratk22@gmail.com (включая Спам) и нажми ссылку Activate Form от FormSubmit.",
-                "error"
-              );
-              return;
-            }
-
-            setStatus(statusEl, "Не удалось отправить сообщение. Попробуй еще раз чуть позже.", "error");
-          })
-          .catch(function () {
-            setStatus(statusEl, "Ошибка отправки. Проверь интернет и попробуй снова.", "error");
-          })
-          .finally(function () {
-            buttons.forEach(function (button) {
-              button.disabled = false;
-            });
-          });
+        stopEvent(event);
+        submitForm();
       },
       { capture: true }
+    );
+
+    window.addEventListener(
+      "submit",
+      function (event) {
+        if (event.target === form || (event.target && event.target.dataset && event.target.dataset.customSubmit === "1")) {
+          stopEvent(event);
+          submitForm();
+        }
+      },
+      true
+    );
+
+    window.addEventListener(
+      "click",
+      function (event) {
+        if (isSubmitClickForForm(event, form)) {
+          stopEvent(event);
+          submitForm();
+        }
+      },
+      true
     );
 
     originalForm.replaceWith(form);
