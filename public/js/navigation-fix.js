@@ -85,6 +85,24 @@
 
   const isBlockedPathname = (pathname) => /\/work\/matching(?:\/|$)/i.test(pathname);
 
+  const isBlockedProjectHref = (hrefValue) => {
+    const href = (hrefValue || "").trim().toLowerCase();
+    if (!href) {
+      return false;
+    }
+    if (href.startsWith("javascript:")) {
+      return true;
+    }
+    return /(^|\/)work\/matching(?:\/|$)/i.test(href);
+  };
+
+  const isBlockedProjectAnchor = (anchor) => {
+    if (!(anchor instanceof HTMLAnchorElement)) {
+      return false;
+    }
+    return anchor.getAttribute("data-coming-soon") === "true" || isBlockedProjectHref(anchor.getAttribute("href"));
+  };
+
   const inferSitePrefix = () => {
     const knownRoots = new Set(["work", "contact", "about", "designsystem", "public", "framer"]);
     const segments = window.location.pathname.split("/").filter(Boolean);
@@ -166,6 +184,12 @@
   const navigateNative = (event) => {
     const anchor = getAnchorFromEvent(event);
     if (!anchor) {
+      return;
+    }
+
+    if (isBlockedProjectAnchor(anchor)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
       return;
     }
 
@@ -254,6 +278,22 @@
     });
   };
 
+  const hardDisableBlockedProjectLinks = () => {
+    document
+      .querySelectorAll('a[data-coming-soon="true"], a[href*="work/matching"]')
+      .forEach((anchor) => {
+        if (!(anchor instanceof HTMLAnchorElement)) {
+          return;
+        }
+
+        anchor.setAttribute("data-coming-soon", "true");
+        anchor.setAttribute("aria-disabled", "true");
+        anchor.setAttribute("href", "javascript:void(0)");
+        anchor.style.pointerEvents = "none";
+        anchor.style.cursor = "default";
+      });
+  };
+
   const scheduleLayerFix = () => {
     if (layerFixScheduled) {
       return;
@@ -263,6 +303,7 @@
     window.requestAnimationFrame(() => {
       layerFixScheduled = false;
       makeMobileNavClickable();
+      hardDisableBlockedProjectLinks();
     });
   };
 
