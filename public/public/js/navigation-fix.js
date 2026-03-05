@@ -1,5 +1,7 @@
 (() => {
   const NOISY_HASHES = new Set(["#hero"]);
+  const NAV_LAYER_Z_INDEX = "2147483000";
+  let layerFixScheduled = false;
 
   const isModifiedClick = (event) =>
     Boolean(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey);
@@ -103,8 +105,57 @@
     window.history.replaceState(null, "", cleanUrl);
   };
 
+  const makeMobileNavClickable = () => {
+    document
+      .querySelectorAll('[data-framer-name="Overlay"], .framer-ayl197')
+      .forEach((overlay) => {
+        if (!(overlay instanceof HTMLElement)) {
+          return;
+        }
+        overlay.style.pointerEvents = "none";
+      });
+
+    document.querySelectorAll("nav").forEach((nav) => {
+      if (!(nav instanceof HTMLElement)) {
+        return;
+      }
+
+      nav.style.zIndex = NAV_LAYER_Z_INDEX;
+      nav.style.pointerEvents = "auto";
+
+      let parent = nav.parentElement;
+      let hops = 0;
+
+      while (parent && hops < 3) {
+        if (parent instanceof HTMLElement) {
+          const computedPosition = window.getComputedStyle(parent).position;
+          if (computedPosition !== "static") {
+            parent.style.zIndex = NAV_LAYER_Z_INDEX;
+          }
+          parent.style.pointerEvents = "auto";
+        }
+        parent = parent.parentElement;
+        hops += 1;
+      }
+    });
+  };
+
+  const scheduleLayerFix = () => {
+    if (layerFixScheduled) {
+      return;
+    }
+
+    layerFixScheduled = true;
+    window.requestAnimationFrame(() => {
+      layerFixScheduled = false;
+      makeMobileNavClickable();
+    });
+  };
+
   document.addEventListener("pointerup", navigateNative, true);
   document.addEventListener("click", navigateNative, true);
+  document.addEventListener("pointerdown", scheduleLayerFix, true);
+  document.addEventListener("click", scheduleLayerFix, true);
 
   document.addEventListener(
     "keydown",
@@ -118,5 +169,14 @@
   );
 
   cleanupNoisyHash();
+  scheduleLayerFix();
   window.addEventListener("hashchange", cleanupNoisyHash);
+  window.addEventListener("resize", scheduleLayerFix);
+  window.addEventListener("load", scheduleLayerFix);
+
+  const observer = new MutationObserver(scheduleLayerFix);
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  });
 })();

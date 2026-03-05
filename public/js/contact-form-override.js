@@ -2,6 +2,9 @@
   var FORM_SELECTOR = "form.framer-iiob8";
   var AJAX_ENDPOINT = "https://formsubmit.co/ajax/leratk22@gmail.com";
   var FALLBACK_ENDPOINT = "https://formsubmit.co/leratk22@gmail.com";
+  var AJAX_TIMEOUT_MS = 10000;
+  var AJAX_ATTEMPTS = 2;
+  var AJAX_RETRY_DELAY_MS = 600;
   var HONEYPOT_NAMES = [
     "website",
     "company",
@@ -82,6 +85,158 @@
     return payload;
   }
 
+  function delay(ms) {
+    return new Promise(function (resolve) {
+      window.setTimeout(resolve, ms);
+    });
+  }
+
+  function postAjax(nameValue, emailValue, messageValue) {
+    var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var timeoutId = null;
+
+    if (controller) {
+      timeoutId = window.setTimeout(function () {
+        controller.abort();
+      }, AJAX_TIMEOUT_MS);
+    }
+
+    return fetch(AJAX_ENDPOINT, {
+      method: "POST",
+      body: buildPayload(nameValue, emailValue, messageValue),
+      headers: {
+        Accept: "application/json"
+      },
+      signal: controller ? controller.signal : undefined
+    }).finally(function () {
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+    });
+  }
+
+  function parseAjaxResponse(response) {
+    return response
+      .json()
+      .catch(function () {
+        return {};
+      })
+      .then(function (data) {
+        var safeData = data || {};
+        var success = String(safeData.success || "").toLowerCase();
+        var message = String(safeData.message || "");
+
+        if (isActivationMessage(message)) {
+          var activationError = new Error("activation_required");
+          activationError.isActivation = true;
+          throw activationError;
+        }
+
+        if (success === "true" || (response.ok && success !== "false")) {
+          return {
+            ok: true,
+            data: safeData
+          };
+        }
+
+        throw new Error("ajax_not_confirmed");
+      });
+  }
+
+  function tryAjaxSubmit(nameValue, emailValue, messageValue) {
+    var attempt = 0;
+
+    function runAttempt() {
+      attempt += 1;
+      return postAjax(nameValue, emailValue, messageValue)
+        .then(parseAjaxResponse)
+        .catch(function (error) {
+          if (error && error.isActivation) {
+            throw error;
+          }
+
+          if (attempt >= AJAX_ATTEMPTS) {
+            throw error;
+          }
+
+          return delay(AJAX_RETRY_DELAY_MS).then(runAttempt);
+        });
+    }
+
+    return runAttempt();
+  }
+
+  function submitFallbackForm(nameValue, emailValue, messageValue) {
+    return new Promise(function (resolve, reject) {
+      if (navigator.onLine === false) {
+        reject(new Error("offline"));
+        return;
+      }
+
+      var iframe = document.createElement("iframe");
+      var iframeName = "formsubmit-fallback-" + Date.now();
+      iframe.name = iframeName;
+      iframe.style.display = "none";
+      iframe.setAttribute("aria-hidden", "true");
+
+      var fallbackForm = document.createElement("form");
+      fallbackForm.method = "POST";
+      fallbackForm.action = FALLBACK_ENDPOINT;
+      fallbackForm.target = iframeName;
+      fallbackForm.style.display = "none";
+
+      var fields = {
+        name: nameValue,
+        email: emailValue,
+        message: messageValue,
+        _subject: "New message from portfolio contact form",
+        _captcha: "false",
+        _template: "table"
+      };
+
+      Object.keys(fields).forEach(function (key) {
+        var input = document.createElement("input");
+        input.type = "hidden";
+        input.name = key;
+        input.value = String(fields[key]);
+        fallbackForm.appendChild(input);
+      });
+
+      function cleanup() {
+        window.setTimeout(function () {
+          fallbackForm.remove();
+          iframe.remove();
+        }, 50);
+      }
+
+      iframe.addEventListener(
+        "load",
+        function () {
+          cleanup();
+          resolve({ confirmed: true });
+        },
+        { once: true }
+      );
+
+      document.body.appendChild(iframe);
+      document.body.appendChild(fallbackForm);
+
+      try {
+        fallbackForm.submit();
+      } catch (submitError) {
+        cleanup();
+        reject(submitError);
+        return;
+      }
+
+      // If cross-origin policies suppress iframe load events, assume fire-and-forget success.
+      window.setTimeout(function () {
+        cleanup();
+        resolve({ confirmed: false });
+      }, 1800);
+    });
+  }
+
   function isActivationMessage(message) {
     return String(message || "").toLowerCase().indexOf("activation") !== -1;
   }
@@ -140,44 +295,10 @@
 
       setStatus(statusEl, "Отправляю сообщение...", "info");
 
-      fetch(AJAX_ENDPOINT, {
-        method: "POST",
-        body: buildPayload(nameValue, emailValue, messageValue),
-        headers: {
-          Accept: "application/json"
-        }
-      })
-        .then(function (response) {
-          return response
-            .json()
-            .catch(function () {
-              return {};
-            })
-            .then(function (data) {
-              return {
-                response: response,
-                data: data
-              };
-            });
-        })
-        .then(function (result) {
-          var data = result.data || {};
-          var success = String(data.success || "").toLowerCase();
-          var message = String(data.message || "");
-
-          if (isActivationMessage(message)) {
-            var activationError = new Error("activation_required");
-            activationError.isActivation = true;
-            throw activationError;
-          }
-
-          if (success === "true" || (result.response.ok && success !== "false")) {
-            form.reset();
-            setStatus(statusEl, "Сообщение отправлено. Спасибо!", "success");
-            return;
-          }
-
-          throw new Error("ajax_not_confirmed");
+      tryAjaxSubmit(nameValue, emailValue, messageValue)
+        .then(function () {
+          form.reset();
+          setStatus(statusEl, "Сообщение отправлено. Спасибо!", "success");
         })
         .catch(function (error) {
           if (error && error.isActivation) {
@@ -189,13 +310,18 @@
             return;
           }
 
-          return fetch(FALLBACK_ENDPOINT, {
-            method: "POST",
-            mode: "no-cors",
-            body: buildPayload(nameValue, emailValue, messageValue)
-          })
-            .then(function () {
+          return submitFallbackForm(nameValue, emailValue, messageValue)
+            .then(function (result) {
               form.reset();
+              if (result && result.confirmed === false) {
+                setStatus(
+                  statusEl,
+                  "Сообщение отправлено. Если не получу его в течение суток, напиши напрямую: leratk22@gmail.com",
+                  "success"
+                );
+                return;
+              }
+
               setStatus(statusEl, "Сообщение отправлено. Спасибо!", "success");
             })
             .catch(function () {
