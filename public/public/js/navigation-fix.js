@@ -253,16 +253,19 @@
     event.preventDefault();
     event.stopImmediatePropagation();
 
+    if (isMailOrTel) {
+      window.location.href = rawHref;
+      return;
+    }
+
     if (navigateNative.__locked) {
       return;
     }
 
     navigateNative.__locked = true;
-
-    if (isMailOrTel) {
-      window.location.href = rawHref;
-      return;
-    }
+    window.setTimeout(() => {
+      navigateNative.__locked = false;
+    }, 1200);
 
     if (isBlockedNavigation) {
       window.location.assign(getWorkListingPath());
