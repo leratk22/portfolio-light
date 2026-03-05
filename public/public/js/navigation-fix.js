@@ -6,12 +6,65 @@
   const isModifiedClick = (event) =>
     Boolean(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey);
 
-  const getAnchorFromEvent = (event) => {
-    if (!(event.target instanceof Element)) {
+  const getPointerCoordinates = (event) => {
+    if (typeof event.clientX === "number" && typeof event.clientY === "number") {
+      return { x: event.clientX, y: event.clientY };
+    }
+
+    if (event.changedTouches && event.changedTouches.length > 0) {
+      return {
+        x: event.changedTouches[0].clientX,
+        y: event.changedTouches[0].clientY
+      };
+    }
+
+    return null;
+  };
+
+  const pickAnchorByPoint = (event) => {
+    const point = getPointerCoordinates(event);
+    if (!point) {
       return null;
     }
 
-    return event.target.closest("a[href]");
+    const candidates = Array.from(document.querySelectorAll("nav a[href]")).filter((anchor) => {
+      if (!(anchor instanceof HTMLElement)) {
+        return false;
+      }
+
+      const rect = anchor.getBoundingClientRect();
+      return (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        point.x >= rect.left &&
+        point.x <= rect.right &&
+        point.y >= rect.top &&
+        point.y <= rect.bottom
+      );
+    });
+
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    candidates.sort((a, b) => {
+      const aRect = a.getBoundingClientRect();
+      const bRect = b.getBoundingClientRect();
+      return aRect.width * aRect.height - bRect.width * bRect.height;
+    });
+
+    return candidates[0];
+  };
+
+  const getAnchorFromEvent = (event) => {
+    if (event.target instanceof Element) {
+      const nativeAnchor = event.target.closest("a[href]");
+      if (nativeAnchor) {
+        return nativeAnchor;
+      }
+    }
+
+    return pickAnchorByPoint(event);
   };
 
   const resolveTargetUrl = (anchor, event) => {
