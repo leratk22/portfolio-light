@@ -100,7 +100,15 @@
     if (!(anchor instanceof HTMLAnchorElement)) {
       return false;
     }
-    return anchor.getAttribute("data-coming-soon") === "true" || isBlockedProjectHref(anchor.getAttribute("href"));
+    const labelText = (anchor.textContent || "").toLowerCase();
+    const hasBlockedLabel =
+      labelText.includes("psychologist matching flow") || labelText.includes("coming soon");
+
+    return (
+      anchor.getAttribute("data-coming-soon") === "true" ||
+      isBlockedProjectHref(anchor.getAttribute("href")) ||
+      hasBlockedLabel
+    );
   };
 
   const inferSitePrefix = () => {
@@ -279,19 +287,25 @@
   };
 
   const hardDisableBlockedProjectLinks = () => {
-    document
-      .querySelectorAll('a[data-coming-soon="true"], a[href*="work/matching"]')
-      .forEach((anchor) => {
-        if (!(anchor instanceof HTMLAnchorElement)) {
-          return;
-        }
+    document.querySelectorAll("a[href], a[data-coming-soon='true']").forEach((anchor) => {
+      if (!(anchor instanceof HTMLAnchorElement) || !isBlockedProjectAnchor(anchor)) {
+        return;
+      }
 
-        anchor.setAttribute("data-coming-soon", "true");
-        anchor.setAttribute("aria-disabled", "true");
-        anchor.setAttribute("href", "javascript:void(0)");
-        anchor.style.pointerEvents = "none";
-        anchor.style.cursor = "default";
-      });
+      anchor.setAttribute("data-coming-soon", "true");
+      anchor.setAttribute("aria-disabled", "true");
+      anchor.setAttribute("href", "javascript:void(0)");
+      anchor.style.pointerEvents = "none";
+      anchor.style.cursor = "default";
+      anchor.style.userSelect = "none";
+      anchor.removeAttribute("target");
+      anchor.removeAttribute("rel");
+
+      const cardRoot = anchor.closest("[class*='framer-']");
+      if (cardRoot instanceof HTMLElement) {
+        cardRoot.style.pointerEvents = "none";
+      }
+    });
   };
 
   const scheduleLayerFix = () => {
