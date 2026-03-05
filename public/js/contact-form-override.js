@@ -18,6 +18,43 @@
     "remarks",
     "comments"
   ];
+  var FRAMER_FORM_HEADER = "framer-form-fields";
+
+  function installFramerFetchGuard() {
+    if (window.__contactFormFetchGuardInstalled === "1") {
+      return;
+    }
+
+    if (typeof window.fetch !== "function") {
+      return;
+    }
+
+    var nativeFetch = window.fetch.bind(window);
+
+    window.fetch = function (input, init) {
+      try {
+        var headers = new Headers((init && init.headers) || (input && input.headers) || undefined);
+
+        if (headers.has(FRAMER_FORM_HEADER)) {
+          // Block Framer's built-in form sender to avoid CORS issues and duplicate emails.
+          return Promise.resolve(
+            new Response(JSON.stringify({ success: "false", message: "framer_submit_blocked" }), {
+              status: 202,
+              headers: {
+                "Content-Type": "application/json"
+              }
+            })
+          );
+        }
+      } catch (guardError) {
+        // If header inspection fails, fall through to native fetch.
+      }
+
+      return nativeFetch(input, init);
+    };
+
+    window.__contactFormFetchGuardInstalled = "1";
+  }
 
   function hasHidden(form, name) {
     return !!form.querySelector('input[type="hidden"][name="' + name + '"]');
@@ -371,6 +408,7 @@
   }
 
   window.addEventListener("load", function () {
+    installFramerFetchGuard();
     window.setTimeout(patchForm, 0);
   });
 })();
