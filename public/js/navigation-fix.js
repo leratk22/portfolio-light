@@ -84,6 +84,7 @@
   };
 
   const isBlockedPathname = (pathname) => /\/work\/matching(?:\/|$)/i.test(pathname);
+  const ROOT_ROUTE_SEGMENTS = new Set(["work", "contact", "about", "designsystem"]);
 
   const isBlockedProjectHref = (hrefValue) => {
     const href = (hrefValue || "").trim().toLowerCase();
@@ -125,6 +126,40 @@
     return `${prefix}/work/`;
   };
 
+  const getForcedRootRoutePath = (hrefValue) => {
+    const rawHref = (hrefValue || "").trim();
+    if (!rawHref) {
+      return null;
+    }
+
+    const hashIndex = rawHref.indexOf("#");
+    const queryIndex = rawHref.indexOf("?");
+    const cutIndex =
+      hashIndex === -1
+        ? queryIndex
+        : queryIndex === -1
+          ? hashIndex
+          : Math.min(hashIndex, queryIndex);
+
+    const pathOnly = (cutIndex === -1 ? rawHref : rawHref.slice(0, cutIndex)).toLowerCase();
+    if (!pathOnly) {
+      return null;
+    }
+
+    const cleaned = pathOnly
+      .replace(/^(\.\/)+/, "")
+      .replace(/^(\.\.\/)+/, "")
+      .replace(/^\/+/, "")
+      .replace(/\/+$/, "");
+
+    if (!ROOT_ROUTE_SEGMENTS.has(cleaned)) {
+      return null;
+    }
+
+    const prefix = inferSitePrefix();
+    return `${prefix}/${cleaned}/`;
+  };
+
   const resolveTargetUrl = (anchor, event) => {
     const href = anchor.getAttribute("href");
     if (!href) {
@@ -160,7 +195,12 @@
 
     let url;
     try {
-      url = new URL(href, window.location.href);
+      const forcedRootRoute = getForcedRootRoutePath(href);
+      if (forcedRootRoute) {
+        url = new URL(forcedRootRoute, window.location.origin);
+      } else {
+        url = new URL(href, window.location.href);
+      }
     } catch {
       return null;
     }
