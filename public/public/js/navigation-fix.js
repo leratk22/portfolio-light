@@ -133,8 +133,11 @@
       return;
     }
 
+    const rawHref = anchor.getAttribute("href") || "";
+    const isMailOrTel = /^(mailto:|tel:)/i.test(rawHref.trim());
     const next = resolveTargetUrl(anchor, event);
-    if (!next) {
+
+    if (!next && !isMailOrTel) {
       return;
     }
 
@@ -146,6 +149,12 @@
     }
 
     navigateNative.__locked = true;
+
+    if (isMailOrTel) {
+      window.location.href = rawHref;
+      return;
+    }
+
     window.location.assign(next);
   };
 
