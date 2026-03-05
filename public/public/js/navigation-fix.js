@@ -1,5 +1,6 @@
 (() => {
   const NOISY_HASHES = new Set(["#hero"]);
+  const BLOCKED_TARGET = "__blocked__";
   const NAV_LAYER_Z_INDEX = "2147483000";
   let layerFixScheduled = false;
 
@@ -67,6 +68,37 @@
     return pickAnchorByPoint(event);
   };
 
+  const isNoisyHash = (hashValue) => {
+    const hash = (hashValue || "").toLowerCase();
+    return NOISY_HASHES.has(hash) || hash.startsWith("#:");
+  };
+
+  const normalizePathname = (pathname) => {
+    if (typeof pathname !== "string" || pathname.length === 0) {
+      return pathname;
+    }
+
+    return pathname
+      .replace(/\/work\/work(?=\/|$)/gi, "/work")
+      .replace(/\/index\.html$/i, "/");
+  };
+
+  const isBlockedPathname = (pathname) => /\/work\/matching(?:\/|$)/i.test(pathname);
+
+  const inferSitePrefix = () => {
+    const knownRoots = new Set(["work", "contact", "about", "designsystem", "public", "framer"]);
+    const segments = window.location.pathname.split("/").filter(Boolean);
+    if (segments.length === 0 || knownRoots.has(segments[0].toLowerCase())) {
+      return "";
+    }
+    return `/${segments[0]}`;
+  };
+
+  const getWorkListingPath = () => {
+    const prefix = inferSitePrefix();
+    return `${prefix}/work/`;
+  };
+
   const resolveTargetUrl = (anchor, event) => {
     const href = anchor.getAttribute("href");
     if (!href) {
@@ -111,11 +143,15 @@
       return null;
     }
 
-    if (NOISY_HASHES.has(url.hash.toLowerCase())) {
+    if (isNoisyHash(url.hash)) {
       url.hash = "";
     }
 
-    url.pathname = url.pathname.replace(/\/index\.html$/i, "/");
+    url.pathname = normalizePathname(url.pathname);
+
+    if (isBlockedPathname(url.pathname)) {
+      return BLOCKED_TARGET;
+    }
 
     const next = `${url.pathname}${url.search}${url.hash}`;
     const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -136,8 +172,9 @@
     const rawHref = anchor.getAttribute("href") || "";
     const isMailOrTel = /^(mailto:|tel:)/i.test(rawHref.trim());
     const next = resolveTargetUrl(anchor, event);
+    const isBlockedNavigation = next === BLOCKED_TARGET;
 
-    if (!next && !isMailOrTel) {
+    if (!next && !isMailOrTel && !isBlockedNavigation) {
       return;
     }
 
@@ -155,15 +192,30 @@
       return;
     }
 
+    if (isBlockedNavigation) {
+      window.location.assign(getWorkListingPath());
+      return;
+    }
+
     window.location.assign(next);
   };
 
   const cleanupNoisyHash = () => {
-    if (!NOISY_HASHES.has(window.location.hash.toLowerCase())) {
+    const normalizedPathname = normalizePathname(window.location.pathname);
+    const hasPathMismatch = normalizedPathname !== window.location.pathname;
+    const noisyHash = isNoisyHash(window.location.hash);
+    const blockedPath = isBlockedPathname(normalizedPathname);
+
+    if (!hasPathMismatch && !noisyHash && !blockedPath) {
       return;
     }
 
-    const cleanUrl = `${window.location.pathname}${window.location.search}`;
+    if (blockedPath) {
+      window.location.replace(getWorkListingPath());
+      return;
+    }
+
+    const cleanUrl = `${normalizedPathname}${window.location.search}`;
     window.history.replaceState(null, "", cleanUrl);
   };
 
