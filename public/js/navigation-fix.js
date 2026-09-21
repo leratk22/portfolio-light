@@ -1,6 +1,7 @@
 (() => {
   const NOISY_HASHES = new Set(["#hero"]);
   const BLOCKED_TARGET = "__blocked__";
+  const MATCHING_CASE_URL = "/cs-matching-7q4k/";
   const NAV_LAYER_Z_INDEX = "2147483000";
   let layerFixScheduled = false;
 
@@ -97,19 +98,50 @@
     return /(^|\/)work\/matching(?:\/|$)/i.test(href);
   };
 
-  const isBlockedProjectAnchor = (anchor) => {
+  const isMatchingProjectAnchor = (anchor) => {
     if (!(anchor instanceof HTMLAnchorElement)) {
       return false;
     }
     const labelText = (anchor.textContent || "").toLowerCase();
-    const hasBlockedLabel =
-      labelText.includes("psychologist matching flow") || labelText.includes("coming soon");
+    const href = (anchor.getAttribute("href") || "").toLowerCase();
+    return (
+      labelText.includes("psychologist matching flow") ||
+      /(^|\/)work\/matching(?:\/|$)/i.test(href)
+    );
+  };
+
+  const isBlockedProjectAnchor = (anchor) => {
+    if (!(anchor instanceof HTMLAnchorElement) || isMatchingProjectAnchor(anchor)) {
+      return false;
+    }
+    const labelText = (anchor.textContent || "").toLowerCase();
 
     return (
       anchor.getAttribute("data-coming-soon") === "true" ||
       isBlockedProjectHref(anchor.getAttribute("href")) ||
-      hasBlockedLabel
+      labelText.includes("coming soon")
     );
+  };
+
+  const enableMatchingProjectLinks = () => {
+    document.querySelectorAll("a").forEach((anchor) => {
+      if (!isMatchingProjectAnchor(anchor)) {
+        return;
+      }
+      if (anchor.getAttribute("href") !== MATCHING_CASE_URL) {
+        anchor.setAttribute("href", MATCHING_CASE_URL);
+      }
+      anchor.removeAttribute("data-coming-soon");
+      anchor.removeAttribute("aria-disabled");
+      anchor.removeAttribute("target");
+      anchor.style.pointerEvents = "auto";
+      anchor.style.cursor = "pointer";
+      anchor.style.userSelect = "";
+      const cardRoot = anchor.parentElement && anchor.parentElement.closest("[class*='framer-']");
+      if (cardRoot instanceof HTMLElement && cardRoot.style.pointerEvents === "none") {
+        cardRoot.style.pointerEvents = "";
+      }
+    });
   };
 
   const inferSitePrefix = () => {
@@ -216,7 +248,7 @@
     url.pathname = normalizePathname(url.pathname);
 
     if (isBlockedPathname(url.pathname)) {
-      return BLOCKED_TARGET;
+      return MATCHING_CASE_URL;
     }
 
     const next = `${url.pathname}${url.search}${url.hash}`;
@@ -286,7 +318,7 @@
     }
 
     if (blockedPath) {
-      window.location.replace(getWorkListingPath());
+      window.location.replace(MATCHING_CASE_URL);
       return;
     }
 
@@ -360,6 +392,7 @@
     window.requestAnimationFrame(() => {
       layerFixScheduled = false;
       makeMobileNavClickable();
+      enableMatchingProjectLinks();
       hardDisableBlockedProjectLinks();
     });
   };
